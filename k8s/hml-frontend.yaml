@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: siga-hml
+  name: hml-ui
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend-nextjs
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend-nextjs
+    spec:
+      containers:
+      - image: 779846808475.dkr.ecr.us-east-1.amazonaws.com/siga-frontend:latest
+        imagePullPolicy: Always
+        name: frontend-nextjs
+        ports:
+        - containerPort: 3001
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: siga-hml
+  name: hml-ui
+spec:
+  ports:
+    - port: 443
+      targetPort: 3001
+      protocol: TCP
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: frontend-nextjs
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: siga-hml
+  name: hml-ui
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    #alb.ingress.kubernetes.io/inbound-cidrs: 10.0.0.0/16
+    alb.ingress.kubernetes.io/target-type: instance
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:779846808475:certificate/7c9e2d2d-cef1-4534-af1a-feed465113e3
+spec:
+  ingressClassName: internal-alb
+  rules:
+    - http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: hml-ui
+              port:
+                number: 443

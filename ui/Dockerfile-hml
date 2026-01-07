@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /pratumui
+
+#Copy new files or directories into the filesystem of the container
+COPY package.json /pratumui
+COPY yarn.lock /pratumui
+
+#Execute commands in a new layer on top of the current image and commit the results
+RUN yarn install
+
+##Copy new files or directories into the filesystem of the container
+COPY . /pratumui
+
+#Informs container runtime that the container listens on the specified network ports at runtime
+EXPOSE 3000
+
+CMD ["sh", "-c", "yarn build && yarn start"]
+

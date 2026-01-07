@@ -1,0 +1,85 @@
+name: Build Frontend HML Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, Linux, X64]
+    environment: hml
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Criar arquivo .env com secret hml_env
+        run: |
+          echo "${{ secrets.HML_ENV }}" > ui/.env
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: ui
+
+      - name: Build Next.js application
+        run: npm run build
+        working-directory: ui
+
+      - name: Install GitHub CLI
+        run: |
+          (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y))
+          sudo mkdir -p -m 755 /etc/apt/keyrings \
+          && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+          && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt update \
+          && sudo apt install gh -y
+
+      - name: Get last PR number from develop
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.FRONTEND_GH_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh pr list --base develop --state merged --limit 1 --json number --jq '.[0].number')
+                echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+                
+                LAST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+                echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Install Docker
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+
+      - name: Build Docker image with PR tag
+        id: build_image
+        run: |
+          LAST_TAG="${{ steps.pr.outputs.last_tag }}"
+          TIMESTAMP=$(date +%Y%m%d%H%M)
+          TIME_TAG=$TIMESTAMP
+          echo "time_tag=$TIME_TAG" >> $GITHUB_OUTPUT
+          cd ./ui
+          sudo docker build -f ./Dockerfile-hml -t 779846808475.dkr.ecr.us-east-1.amazonaws.com/siga-frontend:hml-$LAST_TAG-$TIME_TAG .
+          sudo docker image ls
+
+      - name: Install AWS CLI
+        if: runner.os == 'Linux'
+        run: |
+          sudo snap install aws-cli --classic
+
+      - name: AWS ECR Login
+        run: aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin 779846808475.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Push Docker image to ECR
+        run: |
+          LAST_TAG="${{ steps.pr.outputs.last_tag }}"
+          TIME_TAG="${{ steps.build_image.outputs.time_tag }}"
+          sudo docker push 779846808475.dkr.ecr.us-east-1.amazonaws.com/siga-frontend:hml-$LAST_TAG-$TIME_TAG

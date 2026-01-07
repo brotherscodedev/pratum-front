@@ -1,0 +1,14 @@
+node_modules
+.next
+ui/yarn-error.log
+ui/.next
+ui/node_modules
+ui/.env
+ui/yarn.lock
+backend/build
+backend/.env*
+ui/.env*
+backend/.idea
+.idea/
+.DS_Store
+ui/out
